@@ -94,10 +94,17 @@ public class NavigationActivity extends Activity {
 			finish();
 			
 		/*
-		 * Not yet implemented. 
+		 * Same as above? Maybe you could merge them...
 		 */
 		} else if (intent.getAction().equals(Intent.ACTION_VIEW)){
+			gc_latitude = intent.getFloatExtra("latitude", 0.0f);
+			gc_longitude = intent.getFloatExtra("longitude", 0.0f);
 			
+			gc_name = gc_code = gc_size = null;
+			
+			startWatchService();
+			finish();
+				
 		}
 
 	}
