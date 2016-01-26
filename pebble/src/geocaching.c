@@ -1,6 +1,7 @@
 #include "pebble.h"
 
 // ADDED GPath point definitions for arrow and north marker
+#if defined(PBL_RECT)
 static const GPathInfo ARROW_POINTS =
 {
   14,
@@ -30,6 +31,30 @@ static const GPathInfo NORTH_POINTS =
     {-6, -31},
   }
 };
+#elif defined(PBL_ROUND)
+static const GPathInfo ARROW_POINTS =
+{
+  7,
+  (GPoint []) {
+    {0, -75},
+    {10, -65},
+    {6, -61},
+    {3, -65},
+    {-3, -65},
+    {-6, -61},
+    {-10, -65},
+  }
+};
+static const GPathInfo NORTH_POINTS =
+{
+  3,
+  (GPoint []) {
+    {0, -85},
+    {6, -76},
+    {-6, -76},
+  }
+};
+#endif
 
 // updated to match new Adroid app
 enum GeoKey {
@@ -63,7 +88,13 @@ int16_t declination = 0;
 
 TextLayer *text_distance_layer;
 TextLayer *text_time_layer;
+#if defined(PBL_RECT)
 Layer *line_layer;
+#elif defined(PBL_ROUND)
+TextLayer *text_date_layer;
+Layer *line_layer_top;
+Layer *line_layer_bottom;
+#endif
 
 static uint8_t data_display = 0;
 
@@ -276,6 +307,7 @@ void config_buttons_provider(void *context) {
    window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
  }
 
+#if defined(PBL_RECT)
 void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 // UPDATED to include date
   static char time_text[] = "XXX XX 00:00";
@@ -297,6 +329,32 @@ void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
     text_layer_set_text(text_time_layer, time_text);
   }
 }
+#elif defined(PBL_ROUND)
+void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
+  static char time_text[] = "00:00";
+  static char date_text[] = "XXX XX";
+
+  char *time_format;
+  char *date_format;
+
+  if (clock_is_24h_style()) {
+    time_format = "%R";
+  } else {
+    time_format = "%I:%M";
+  }
+  date_format = "%b %e";
+
+  strftime(time_text, sizeof(time_text), time_format, tick_time);
+  strftime(date_text, sizeof(date_text), date_format, tick_time);
+
+  if (!clock_is_24h_style() && (time_text[0] == '0')) {
+    text_layer_set_text(text_time_layer, time_text + 1);
+  } else {
+    text_layer_set_text(text_time_layer, time_text);
+  }
+  text_layer_set_text(text_date_layer, date_text);
+}
+#endif
 
 void handle_init(void) {
   window = window_create();
@@ -305,14 +363,9 @@ void handle_init(void) {
 
   window_stack_push(window, true);
 
-#if defined(PBL_RECT)
   Layer *window_layer = window_get_root_layer(window);
-#elif defined(PBL_ROUND)
-  Layer *window_container = window_get_root_layer(window);
-  Layer *window_layer = layer_create(GRect(18, 6, 144, 168));
-  layer_add_child(window_container, window_layer);
-#endif
 
+#if defined(PBL_RECT)
   // Initialize distance layout
   Layer *distance_holder = layer_create(GRect(0, 80, 144, 40));
   layer_add_child(window_layer, distance_holder);
@@ -352,6 +405,60 @@ void handle_init(void) {
   arrow_layer = layer_create(GRect(0, 0, 144, 79));
   layer_set_update_proc(arrow_layer, arrow_layer_update_callback);
   layer_add_child(compass_holder, arrow_layer);
+#elif defined(PBL_ROUND)
+  GRect window_bounds = layer_get_bounds(window_layer);
+
+  // Initialize distance layout
+  Layer *distance_holder = layer_create(GRect(0, (window_bounds.size.h/2)-20, window_bounds.size.w, 40));
+  layer_add_child(window_layer, distance_holder);
+
+  ResHandle roboto_36 = resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_36);
+  text_distance_layer = text_layer_create(GRect(0, -3, window_bounds.size.w, 40));
+  text_layer_set_text_color(text_distance_layer, GColorWhite);
+  text_layer_set_text_alignment(text_distance_layer, GTextAlignmentCenter);
+  text_layer_set_background_color(text_distance_layer, GColorClear);
+  text_layer_set_font(text_distance_layer, fonts_load_custom_font(roboto_36));
+  layer_add_child(distance_holder, text_layer_get_layer(text_distance_layer));
+
+  line_layer_top = layer_create(GRect(35, 0, window_bounds.size.w-70, 2));
+  layer_add_child(distance_holder, line_layer_top);
+  layer_set_update_proc(line_layer_top, line_layer_update_callback);
+  line_layer_bottom = layer_create(GRect(35, 38, window_bounds.size.w-70, 2));
+  layer_add_child(distance_holder, line_layer_bottom);
+  layer_set_update_proc(line_layer_bottom, line_layer_update_callback);
+
+  // Initialize time layout
+  Layer *time_holder = layer_create(GRect(0, (window_bounds.size.h/2)-56, window_bounds.size.w, 36));
+  layer_add_child(window_layer, time_holder);
+
+  ResHandle roboto_22 = resource_get_handle(RESOURCE_ID_FONT_ROBOTO_BOLD_SUBSET_22);
+  text_time_layer = text_layer_create(GRect(0, 2, window_bounds.size.w, 32));
+  text_layer_set_text_color(text_time_layer, GColorWhite);
+  text_layer_set_text_alignment(text_time_layer, GTextAlignmentCenter);
+  text_layer_set_background_color(text_time_layer, GColorClear);
+  text_layer_set_font(text_time_layer, fonts_load_custom_font(roboto_22));
+  layer_add_child(time_holder, text_layer_get_layer(text_time_layer));
+
+  // Initialize date layout
+  Layer *date_holder = layer_create(GRect(0, (window_bounds.size.h/2)+20, window_bounds.size.w, 36));
+  layer_add_child(window_layer, date_holder);
+
+  text_date_layer = text_layer_create(GRect(0, 2, window_bounds.size.w, 32));
+  text_layer_set_text_color(text_date_layer, GColorWhite);
+  text_layer_set_text_alignment(text_date_layer, GTextAlignmentCenter);
+  text_layer_set_background_color(text_date_layer, GColorClear);
+  text_layer_set_font(text_date_layer, fonts_load_custom_font(roboto_22));
+  layer_add_child(date_holder, text_layer_get_layer(text_date_layer));
+
+  // Initialize compass layout
+  Layer *compass_holder = layer_create(window_bounds);
+  layer_add_child(window_layer, compass_holder);
+
+// Definitions for Path layer
+  arrow_layer = layer_create(window_bounds);
+  layer_set_update_proc(arrow_layer, arrow_layer_update_callback);
+  layer_add_child(compass_holder, arrow_layer);
+#endif
 
 // centrepoint added for use in rotations
   arrow_bounds = layer_get_frame(arrow_layer);
@@ -402,7 +509,13 @@ void handle_deinit(void) {
 
 // added layer destroys
   text_layer_destroy(text_time_layer);
+#if defined(PBL_RECT)
   layer_destroy(line_layer);
+#elif defined(PBL_ROUND)
+  text_layer_destroy(text_date_layer);
+  layer_destroy(line_layer_top);
+  layer_destroy(line_layer_bottom);
+#endif
   text_layer_destroy(text_distance_layer);
   gpath_destroy(arrow);
   layer_destroy(arrow_layer);
