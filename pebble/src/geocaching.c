@@ -305,7 +305,13 @@ void handle_init(void) {
 
   window_stack_push(window, true);
 
+#if defined(PBL_RECT)
   Layer *window_layer = window_get_root_layer(window);
+#elif defined(PBL_ROUND)
+  Layer *window_container = window_get_root_layer(window);
+  Layer *window_layer = layer_create(GRect(18, 6, 144, 168));
+  layer_add_child(window_container, window_layer);
+#endif
 
   // Initialize distance layout
   Layer *distance_holder = layer_create(GRect(0, 80, 144, 40));
